@@ -385,6 +385,13 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--text-secondary);
 }
 
+.dashboard-search {
+  max-width: 320px;
+  min-width: 200px;
+  padding: 10px 14px;
+  font-size: 0.9rem;
+}
+
 /* Before / After Gallery */
 .gallery-grid {
   display: grid;

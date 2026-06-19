@@ -127,9 +127,36 @@ function App() {
 // DASHBOARD VIEW
 // -----------------------------------------------------------------------------
 function DashboardView({ data, onViewJob, onOpenNewJob }) {
+  const [searchQuery, setSearchQuery] = useState('');
+
   if (!data) return null;
   const { summary, workloadBreakdown, recentJobs } = data;
   const activeWorkload = workloadBreakdown.filter((item) => item.count > 0);
+
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredJobs = recentJobs.filter((job) => {
+    if (!normalizedQuery) return true;
+
+    const statusLabel =
+      job.status === 'PENDING' ? 'รอดำเนินการ' :
+      job.status === 'IN_PROGRESS' ? 'กำลังซ่อม' : 'เสร็จสิ้น';
+
+    const searchableText = [
+      job.job_id,
+      job.machine_id,
+      job.description,
+      job.costcenter,
+      statusLabel,
+      job.main_technician?.name,
+      job.electrician?.name,
+      job.closed_at ? new Date(job.closed_at).toLocaleDateString('th-TH') : '',
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    return searchableText.includes(normalizedQuery);
+  });
 
   return (
     <div className="animate-fade-in">
@@ -157,8 +184,15 @@ function DashboardView({ data, onViewJob, onOpenNewJob }) {
       <div className="job-detail-grid">
         {/* Left Column: Recent Jobs */}
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, gap: 16 }}>
             <h2>รายการใบงานซ่อมล่าสุด</h2>
+            <input
+              type="search"
+              className="form-control dashboard-search"
+              placeholder="ค้นหาใบงาน, เครื่องจักร, ช่าง..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
           </div>
 
           {recentJobs.length === 0 ? (
@@ -166,9 +200,13 @@ function DashboardView({ data, onViewJob, onOpenNewJob }) {
               <p style={{ color: 'var(--text-secondary)', marginBottom: 20 }}>ไม่มีใบสั่งซ่อมบำรุงในฐานข้อมูล</p>
               <button className="btn btn-primary" onClick={onOpenNewJob}>เปิดใบสั่งซ่อมใบแรก</button>
             </div>
+          ) : filteredJobs.length === 0 ? (
+            <div className="glass-panel" style={{ textAlign: 'center', padding: '40px' }}>
+              <p style={{ color: 'var(--text-secondary)' }}>ไม่พบใบงานที่ตรงกับคำค้นหา "{searchQuery}"</p>
+            </div>
           ) : (
             <div className="jobs-grid">
-              {recentJobs.map((job) => (
+              {filteredJobs.map((job) => (
                 <div key={job.job_id} className="glass-panel job-card" onClick={() => onViewJob(job.job_id)}>
                   <div>
                     <div className="job-card-header">
@@ -186,6 +224,15 @@ function DashboardView({ data, onViewJob, onOpenNewJob }) {
                       <h3 style={{ fontSize: '1.15rem', marginBottom: 8, fontWeight: 600 }}>
                         เครื่องจักร: {job.machine_id}
                       </h3>
+                      {job.status === 'COMPLETED' && job.closed_at && (
+                        <div style={{ fontSize: '0.85rem', color: 'var(--success-color)', marginBottom: 8 }}>
+                          วันที่แล้วเสร็จ: {new Date(job.closed_at).toLocaleDateString('th-TH', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </div>
+                      )}
                       <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', height: '60px', marginBottom: 12 }}>
                         {job.description}
                       </p>
