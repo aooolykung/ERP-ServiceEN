@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  # 1. ฐานข้อมูล PostgreSQL
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: mysecretpassword
+      POSTGRES_DB: erp_db
+    volumes:
+      - ./db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  # 2. ที่เก็บรูปภาพ MinIO
+  minio:
+    image: minio/minio:latest
+    restart: always
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadminpassword
+    volumes:
+      - ./minio_data:/data
+    command: server /data --console-address ":9001"
+
+  # 3. โค้ด Express (Backend)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "5001:5001"
+    environment:
+      - DATABASE_URL=postgres://admin:mysecretpassword@db:5432/erp_db
+      - MINIO_ENDPOINT=minio
+      - MINIO_PORT=9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadminpassword
+      - MINIO_USE_SSL=false
+      - MINIO_BUCKET_NAME=job-images
+      - MINIO_PUBLIC_URL=https://minio-oss.servicesen.cc
+    depends_on:
+      - db
+      - minio
+
+  # 4. โค้ด React (Frontend)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend

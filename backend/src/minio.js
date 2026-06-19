@@ -61,12 +61,18 @@ export const uploadImage = async (file) => {
     { 'Content-Type': file.mimetype }
   );
 
-  // Return public url
-  const protocol = process.env.MINIO_USE_SSL === 'true' ? 'https' : 'http';
-  const endpoint = process.env.MINIO_ENDPOINT || 'localhost';
-  const port = process.env.MINIO_PORT || '9000';
+  // --- แก้ไขตรงนี้ครับ ---
+  // ถ้าใน .env ของคุณมี MINIO_PUBLIC_URL ให้ใช้ตัวนั้นเป็นหลัก
+  // เพราะนี่คือสิ่งที่ Browser ต้องเข้าถึง
+  if (process.env.MINIO_PUBLIC_URL) {
+    return `${process.env.MINIO_PUBLIC_URL}/${bucketName}/${objectName}`;
+  }
 
-  return `${protocol}://${endpoint}:${port}/${bucketName}/${objectName}`;
+  // กรณีรันในเครื่องตัวเอง (Development)
+  //const protocol = process.env.MINIO_USE_SSL === 'true' ? 'https' : 'http';
+  //const endpoint = process.env.MINIO_ENDPOINT || 'localhost';
+  //const port = process.env.MINIO_PORT || '9000';
+  //return `${protocol}://${endpoint}:${port}/${bucketName}/${objectName}`;
 };
 
 export { minioClient, bucketName };
