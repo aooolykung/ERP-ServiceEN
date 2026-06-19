@@ -313,7 +313,52 @@ app.put('/api/jobs/:id/close', upload.array('images', 10), async (req, res) => {
   }
 });
 
-// 7. PUT /api/jobs/:id/start - Update job status to IN_PROGRESS
+// 7. POST /api/jobs/:id/images - Add BEFORE or AFTER images to an existing job
+app.post('/api/jobs/:id/images', upload.array('images', 10), async (req, res) => {
+  const { id } = req.params;
+  const { image_type } = req.body;
+
+  if (!['BEFORE', 'AFTER'].includes(image_type)) {
+    return res.status(400).json({ error: 'Invalid image_type. Must be BEFORE or AFTER.' });
+  }
+
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ error: 'No images provided' });
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const checkJob = await client.query('SELECT job_id FROM jobs WHERE job_id = $1', [id]);
+    if (checkJob.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Job not found' });
+    }
+
+    const imageQuery = `
+      INSERT INTO job_images (job_id, image_url, image_type)
+      VALUES ($1, $2, $3)
+    `;
+
+    for (const file of req.files) {
+      const imageUrl = await uploadImage(file);
+      await client.query(imageQuery, [id, imageUrl, image_type]);
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: 'Images uploaded successfully' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(`Error uploading images for job ${id}:`, err);
+    res.status(500).json({ error: 'Failed to upload images' });
+  } finally {
+    client.release();
+  }
+});
+
+// 8. PUT /api/jobs/:id/start - Update job status to IN_PROGRESS
 app.put('/api/jobs/:id/start', async (req, res) => {
   const { id } = req.params;
   try {

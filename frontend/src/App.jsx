@@ -579,6 +579,7 @@ function JobDetailView({ jobId, onBack }) {
   const [afterPreviews, setAfterPreviews] = useState([]);
   const [closing, setClosing] = useState(false);
   const [actionError, setActionError] = useState('');
+  const [uploadingImages, setUploadingImages] = useState({ BEFORE: false, AFTER: false });
 
   const loadJobDetails = async () => {
     try {
@@ -622,6 +623,34 @@ function JobDetailView({ jobId, onBack }) {
 
     const filePreviews = files.map(file => URL.createObjectURL(file));
     setAfterPreviews(prev => [...prev, ...filePreviews]);
+  };
+
+  const handleGalleryImageUpload = async (imageType, e) => {
+    const files = Array.from(e.target.files);
+    e.target.value = '';
+    if (files.length === 0) return;
+
+    setUploadingImages(prev => ({ ...prev, [imageType]: true }));
+    setActionError('');
+
+    try {
+      const formData = new FormData();
+      formData.append('image_type', imageType);
+      files.forEach(file => formData.append('images', file));
+
+      const res = await fetch(`${API_BASE_URL}/api/jobs/${jobId}/images`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!res.ok) throw new Error('Failed to upload images');
+      await loadJobDetails();
+    } catch (err) {
+      console.error(err);
+      setActionError('ไม่สามารถอัปโหลดรูปภาพได้ กรุณาลองใหม่อีกครั้ง');
+    } finally {
+      setUploadingImages(prev => ({ ...prev, [imageType]: false }));
+    }
   };
 
   const removeAfterPreview = (index) => {
@@ -751,8 +780,26 @@ function JobDetailView({ jobId, onBack }) {
             <div className="gallery-grid">
               {/* Before Column */}
               <div className="gallery-column">
-                <div className="gallery-title" style={{ color: 'var(--warning-color)' }}>
-                  <span>📸</span> ภาพก่อนทำซ่อมบำรุง (Before)
+                <div className="gallery-header">
+                  <div className="gallery-title" style={{ color: 'var(--warning-color)' }}>
+                    <span>📸</span> ภาพก่อนทำซ่อมบำรุง (Before)
+                  </div>
+                  <label
+                    htmlFor="before-gallery-input"
+                    className="btn btn-secondary btn-sm"
+                    style={{ cursor: uploadingImages.BEFORE ? 'wait' : 'pointer', opacity: uploadingImages.BEFORE ? 0.7 : 1 }}
+                  >
+                    {uploadingImages.BEFORE ? 'กำลังอัปโหลด...' : 'เพิ่มรูปภาพ'}
+                  </label>
+                  <input
+                    id="before-gallery-input"
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={(e) => handleGalleryImageUpload('BEFORE', e)}
+                    disabled={uploadingImages.BEFORE}
+                  />
                 </div>
                 {beforeImages.length === 0 ? (
                   <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', padding: '20px 0' }}>ไม่มีรูปภาพถ่ายก่อนหน้าซ่อม</p>
@@ -771,8 +818,26 @@ function JobDetailView({ jobId, onBack }) {
 
               {/* After Column */}
               <div className="gallery-column">
-                <div className="gallery-title" style={{ color: 'var(--success-color)' }}>
-                  <span>✅</span> ภาพหลังซ่อมแซมเสร็จ (After)
+                <div className="gallery-header">
+                  <div className="gallery-title" style={{ color: 'var(--success-color)' }}>
+                    <span>✅</span> ภาพหลังซ่อมแซมเสร็จ (After)
+                  </div>
+                  <label
+                    htmlFor="after-gallery-input"
+                    className="btn btn-secondary btn-sm"
+                    style={{ cursor: uploadingImages.AFTER ? 'wait' : 'pointer', opacity: uploadingImages.AFTER ? 0.7 : 1 }}
+                  >
+                    {uploadingImages.AFTER ? 'กำลังอัปโหลด...' : 'เพิ่มรูปภาพ'}
+                  </label>
+                  <input
+                    id="after-gallery-input"
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={(e) => handleGalleryImageUpload('AFTER', e)}
+                    disabled={uploadingImages.AFTER}
+                  />
                 </div>
                 {afterImages.length === 0 ? (
                   <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', padding: '20px 0' }}>ยังไม่มีรูปภาพปิดงานซ่อมแซม</p>
