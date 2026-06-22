@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import imageCompression from 'browser-image-compression';
 import './App.css';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
-
 function App() {
+  const [currentUser, setCurrentUser] = useState(() => JSON.parse(localStorage.getItem('currentUser') || 'null'));
   const [view, setView] = useState('dashboard'); // 'dashboard', 'new-job', 'job-detail'
   const [selectedJobId, setSelectedJobId] = useState(null);
   const [dashboardData, setDashboardData] = useState(null);
@@ -14,6 +15,7 @@ function App() {
 
   // Fetch all initial data
   const loadDashboard = async () => {
+    if (!currentUser) return;
     try {
       setLoading(true);
       const res = await fetch(`${API_BASE_URL}/api/dashboard`);
@@ -30,6 +32,7 @@ function App() {
   };
 
   const loadMetadata = async () => {
+    if (!currentUser) return;
     try {
       const [machinesRes, usersRes] = await Promise.all([
         fetch(`${API_BASE_URL}/api/machines`),
@@ -43,9 +46,11 @@ function App() {
   };
 
   useEffect(() => {
-    loadDashboard();
-    loadMetadata();
-  }, []);
+    if (currentUser) {
+      loadDashboard();
+      loadMetadata();
+    }
+  }, [currentUser]);
 
   const handleBackToDashboard = () => {
     setView('dashboard');
@@ -59,6 +64,10 @@ function App() {
     setView('job-detail');
   };
 
+  if (!currentUser) {
+    return <LoginView onLoginSuccess={(user) => setCurrentUser(user)} />;
+  }
+
   return (
     <div className="app-container">
       {/* Premium Header */}
@@ -67,17 +76,38 @@ function App() {
           <span className="logo-icon"></span>
           <span className="gradient-text">ERP Job Manager</span>
         </div>
-        <div>
-          {view === 'dashboard' ? (
-            <button className="btn btn-primary" onClick={() => setView('new-job')}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-              เปิดใบสั่งซ่อมใหม่
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+          <div className="user-profile-header">
+            <div className="user-info-text">
+              <strong style={{ display: 'block', fontSize: '0.9rem' }}>{currentUser.name}</strong>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                {currentUser.system_role === 'admin' ? '⚙️ Admin' : '👤 Technician'}
+              </span>
+            </div>
+            <button 
+              className="btn btn-secondary btn-sm" 
+              onClick={() => {
+                localStorage.removeItem('currentUser');
+                setCurrentUser(null);
+              }}
+              style={{ padding: '8px 12px', fontSize: '0.8rem' }}
+            >
+              ออกจากระบบ
             </button>
-          ) : (
-            <button className="btn btn-secondary" onClick={handleBackToDashboard}>
-              ย้อนกลับหน้าหลัก
-            </button>
-          )}
+          </div>
+          <div style={{ borderLeft: '1px solid var(--border-color)', height: 30 }}></div>
+          <div>
+            {view === 'dashboard' ? (
+              <button className="btn btn-primary" onClick={() => setView('new-job')}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                เปิดใบสั่งซ่อมใหม่
+              </button>
+            ) : (
+              <button className="btn btn-secondary" onClick={handleBackToDashboard}>
+                ย้อนกลับหน้าหลัก
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
@@ -118,6 +148,145 @@ function App() {
           jobId={selectedJobId}
           onBack={handleBackToDashboard}
         />
+      )}
+    </div>
+  );
+}
+
+function LoginView({ onLoginSuccess }) {
+  const [empId, setEmpId] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [admins, setAdmins] = useState([]);
+  const [forgotLoading, setForgotLoading] = useState(false);
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    if (!empId.trim() || !password.trim()) {
+      setError('กรุณากรอกรหัสพนักงานและรหัสผ่าน');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ empId, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'การล็อกอินล้มเหลว');
+      }
+      localStorage.setItem('currentUser', JSON.stringify(data.user));
+      onLoginSuccess(data.user);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    setForgotLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ empId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setAdmins(data.admins || []);
+        setShowForgotModal(true);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  return (
+    <div className="login-wrapper animate-fade-in">
+      <div className="login-card">
+        <div className="login-header">
+          <div className="login-logo-container">
+            <span className="login-logo-icon"></span>
+            <h2 className="gradient-text" style={{ fontSize: '1.8rem' }}>ERP Services</h2>
+          </div>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+            กรุณาล็อกอินด้วยรหัสพนักงานเพื่อเริ่มใช้งาน
+          </p>
+        </div>
+
+        {error && (
+          <div style={{ background: 'rgba(255, 51, 102, 0.1)', border: '1px solid var(--danger-color)', padding: 12, borderRadius: 8, color: 'var(--danger-color)', marginBottom: 20, fontSize: '0.9rem' }}>
+            ⚠️ {error}
+          </div>
+        )}
+
+        <form onSubmit={handleLogin}>
+          <div className="form-group">
+            <label className="form-label">รหัสพนักงาน (Employee ID)</label>
+            <input
+              type="text"
+              className="form-control"
+              placeholder="กรอกรหัสพนักงาน"
+              value={empId}
+              onChange={(e) => setEmpId(e.target.value)}
+              required
+            />
+          </div>
+          <div className="form-group" style={{ marginBottom: 10 }}>
+            <label className="form-label">รหัสผ่าน (Password)</label>
+            <input
+              type="password"
+              className="form-control"
+              placeholder="กรอกรหัสผ่าน"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="login-footer-actions">
+            <button type="button" className="forgot-password-link" onClick={handleForgotPassword} disabled={forgotLoading}>
+              {forgotLoading ? 'กำลังโหลด...' : 'ลืมรหัสผ่าน?'}
+            </button>
+          </div>
+
+          <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: 25 }} disabled={loading}>
+            {loading ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}
+          </button>
+        </form>
+      </div>
+
+      {showForgotModal && (
+        <div className="modal-overlay" onClick={() => setShowForgotModal(false)}>
+          <div className="modal-card animate-fade-in" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 450 }}>
+            <div className="modal-header">
+              <h3>ลืมรหัสผ่าน?</h3>
+              <button className="modal-close-btn" onClick={() => setShowForgotModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ color: 'var(--text-secondary)', marginBottom: 20, fontSize: '0.95rem' }}>
+                รหัสผ่านเริ่มต้นของท่านคือ **รหัสพนักงาน** หากท่านเคยเปลี่ยนรหัสผ่านแล้วและลืม กรุณาติดต่อผู้ดูแลระบบด้านล่างนี้เพื่อขอรีเซ็ตรหัสผ่านใหม่:
+              </p>
+              <div className="admin-list">
+                {admins.map((admin, idx) => (
+                  <div key={idx} className="admin-item">
+                    <strong>👤 {admin.name}</strong>
+                    {admin.phone && <p>📞 เบอร์โทร: {admin.phone}</p>}
+                    {admin.email && <p>✉️ อีเมล: {admin.email}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -321,13 +490,30 @@ function JobFormView({ machines, users, onSuccess, onCancel }) {
     machine.machine_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (machine.costcenter && machine.costcenter.toLowerCase().includes(searchTerm.toLowerCase()))
   );
-
-  const handleImageChange = (e) => {
+  const handleImageChange = async (e) => {
     const files = Array.from(e.target.files);
-    setSelectedImages(prev => [...prev, ...files]);
-
-    const filePreviews = files.map(file => URL.createObjectURL(file));
-    setPreviews(prev => [...prev, ...filePreviews]);
+    const options = {
+      maxSizeMB: 1,
+      maxWidthOrHeight: 1024,
+      useWebWorker: true,
+    };
+    try {
+      const compressedFiles = await Promise.all(
+        files.map(async (file) => {
+          try {
+            return await imageCompression(file, options);
+          } catch (err) {
+            console.error('Image compression error:', err);
+            return file;
+          }
+        })
+      );
+      setSelectedImages(prev => [...prev, ...compressedFiles]);
+      const filePreviews = compressedFiles.map(file => URL.createObjectURL(file));
+      setPreviews(prev => [...prev, ...filePreviews]);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const removeSelectedImage = (index) => {
@@ -627,6 +813,7 @@ function JobDetailView({ jobId, onBack }) {
   const [closing, setClosing] = useState(false);
   const [actionError, setActionError] = useState('');
   const [uploadingImages, setUploadingImages] = useState({ BEFORE: false, AFTER: false });
+  const [previewImage, setPreviewImage] = useState(null);
 
   const loadJobDetails = async () => {
     try {
@@ -664,12 +851,30 @@ function JobDetailView({ jobId, onBack }) {
     }
   };
 
-  const handleAfterImageChange = (e) => {
+  const handleAfterImageChange = async (e) => {
     const files = Array.from(e.target.files);
-    setSelectedAfterImages(prev => [...prev, ...files]);
-
-    const filePreviews = files.map(file => URL.createObjectURL(file));
-    setAfterPreviews(prev => [...prev, ...filePreviews]);
+    const options = {
+      maxSizeMB: 1,
+      maxWidthOrHeight: 1024,
+      useWebWorker: true,
+    };
+    try {
+      const compressedFiles = await Promise.all(
+        files.map(async (file) => {
+          try {
+            return await imageCompression(file, options);
+          } catch (err) {
+            console.error('Image compression error:', err);
+            return file;
+          }
+        })
+      );
+      setSelectedAfterImages(prev => [...prev, ...compressedFiles]);
+      const filePreviews = compressedFiles.map(file => URL.createObjectURL(file));
+      setAfterPreviews(prev => [...prev, ...filePreviews]);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleGalleryImageUpload = async (imageType, e) => {
@@ -681,9 +886,25 @@ function JobDetailView({ jobId, onBack }) {
     setActionError('');
 
     try {
+      const options = {
+        maxSizeMB: 1,
+        maxWidthOrHeight: 1024,
+        useWebWorker: true,
+      };
+      const compressedFiles = await Promise.all(
+        files.map(async (file) => {
+          try {
+            return await imageCompression(file, options);
+          } catch (err) {
+            console.error('Image compression error:', err);
+            return file;
+          }
+        })
+      );
+
       const formData = new FormData();
       formData.append('image_type', imageType);
-      files.forEach(file => formData.append('images', file));
+      compressedFiles.forEach(file => formData.append('images', file));
 
       const res = await fetch(`${API_BASE_URL}/api/jobs/${jobId}/images`, {
         method: 'POST',
@@ -853,10 +1074,8 @@ function JobDetailView({ jobId, onBack }) {
                 ) : (
                   <div className="image-grid">
                     {beforeImages.map(img => (
-                      <div key={img.id} className="gallery-image-wrapper">
-                        <a href={img.image_url} target="_blank" rel="noopener noreferrer">
-                          <img src={img.image_url} className="gallery-image" alt="Before maintenance" />
-                        </a>
+                      <div key={img.id} className="gallery-image-wrapper" onClick={() => setPreviewImage(img)} style={{ cursor: 'pointer' }}>
+                        <img src={img.image_url} className="gallery-image" alt="Before maintenance" />
                       </div>
                     ))}
                   </div>
@@ -891,10 +1110,8 @@ function JobDetailView({ jobId, onBack }) {
                 ) : (
                   <div className="image-grid">
                     {afterImages.map(img => (
-                      <div key={img.id} className="gallery-image-wrapper">
-                        <a href={img.image_url} target="_blank" rel="noopener noreferrer">
-                          <img src={img.image_url} className="gallery-image" alt="After maintenance" />
-                        </a>
+                      <div key={img.id} className="gallery-image-wrapper" onClick={() => setPreviewImage(img)} style={{ cursor: 'pointer' }}>
+                        <img src={img.image_url} className="gallery-image" alt="After maintenance" />
                       </div>
                     ))}
                   </div>
@@ -1056,6 +1273,32 @@ function JobDetailView({ jobId, onBack }) {
         </div>
 
       </div>
+
+      {previewImage && (
+        <div className="modal-overlay" onClick={() => setPreviewImage(null)}>
+          <div className="modal-card animate-fade-in" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>ภาพตรวจสอบซ่อมบำรุง ({previewImage.image_type === 'BEFORE' ? 'ก่อนทำ' : 'หลังทำ'})</h3>
+              <button className="modal-close-btn" onClick={() => setPreviewImage(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="modal-img-container">
+                <img src={previewImage.image_url} className="modal-img" alt="Preview" />
+              </div>
+              <div className="modal-details">
+                <div>
+                  <span className="form-label" style={{ fontSize: '0.75rem' }}>ประเภทภาพ</span>
+                  <strong>{previewImage.image_type === 'BEFORE' ? 'ก่อนหน้าซ่อมบำรุง (Before)' : 'หลังซ่อมแซมเสร็จ (After)'}</strong>
+                </div>
+                <div>
+                  <span className="form-label" style={{ fontSize: '0.75rem' }}>เวลาอัปโหลด</span>
+                  <span>{new Date(previewImage.uploaded_at).toLocaleString('th-TH')}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

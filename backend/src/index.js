@@ -29,6 +29,54 @@ initMinio();
 // API ENDPOINTS
 // -----------------------------------------------------------------------------
 
+// 0. AUTH ENDPOINTS
+app.post('/api/auth/login', async (req, res) => {
+  const { empId, password } = req.body;
+  if (!empId || !password) {
+    return res.status(400).json({ error: 'กรุณากรอกรหัสพนักงานและรหัสผ่าน' });
+  }
+  try {
+    const result = await pool.query(
+      'SELECT emp_id, name, system_role, password FROM users WHERE emp_id = $1',
+      [empId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'ไม่พบรหัสพนักงานในระบบ' });
+    }
+    const user = result.rows[0];
+    if (user.password !== password) {
+      return res.status(401).json({ error: 'รหัสผ่านไม่ถูกต้อง' });
+    }
+    res.json({
+      success: true,
+      user: {
+        emp_id: user.emp_id,
+        name: user.name,
+        system_role: user.system_role
+      }
+    });
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const adminsResult = await pool.query(
+      "SELECT name, phone, email FROM users WHERE system_role = 'admin'"
+    );
+    res.json({
+      success: true,
+      message: 'กรุณาติดต่อผู้ดูแลระบบด้านล่างเพื่อขอรีเซ็ตรหัสผ่าน:',
+      admins: adminsResult.rows
+    });
+  } catch (err) {
+    console.error('Forgot password error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // 1. GET /api/machines - List all machines
 app.get('/api/machines', async (req, res) => {
   try {
